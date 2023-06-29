@@ -56,3 +56,32 @@ console.log(html);
 ```bash
     yarn build
 ```
+
+### 支持
+
+**标题**
+![标题](https://raw.githubusercontent.com/forzys/custom-markdown/main/img/biaoti.png)
+ 
+
+**文字**
+![文字](https://raw.githubusercontent.com/forzys/custom-markdown/main/img/wenzi.png)
+
+
+**引用**
+![引用](https://raw.githubusercontent.com/forzys/custom-markdown/main/img/yinyong.png)
+ 
+
+**图片**
+![图片](https://raw.githubusercontent.com/forzys/custom-markdown/main/img/tupian.png)
+
+
+**列表**
+![列表](https://raw.githubusercontent.com/forzys/custom-markdown/main/img/liebiao.png)
+
+
+**代码**
+![代码](https://raw.githubusercontent.com/forzys/custom-markdown/main/img/daima.png)
+
+
+**表格**
+![表格](https://raw.githubusercontent.com/forzys/custom-markdown/main/img/biaoge.png)
