@@ -57,31 +57,40 @@ console.log(html);
     yarn build
 ```
 
-### 支持
+### 支持情况
 
-**标题**
-![标题](https://raw.githubusercontent.com/forzys/custom-markdown/main/img/biaoti.png)
+<br />
+
+**标题** 
+ 
+<img src="https://raw.githubusercontent.com/forzys/custom-markdown/main/img/biaoti.png" width="50%" />
  
 
-**文字**
-![文字](https://raw.githubusercontent.com/forzys/custom-markdown/main/img/wenzi.png)
+**文本** 
+
+<img src="https://raw.githubusercontent.com/forzys/custom-markdown/main/img/wenben.png" width="50%" />
 
 
-**引用**
-![引用](https://raw.githubusercontent.com/forzys/custom-markdown/main/img/yinyong.png)
+**引用** 
+
+<img src="https://raw.githubusercontent.com/forzys/custom-markdown/main/img/yinyong.png" width="50%" />
  
 
-**图片**
-![图片](https://raw.githubusercontent.com/forzys/custom-markdown/main/img/tupian.png)
+**图片**   
+
+<img src="https://raw.githubusercontent.com/forzys/custom-markdown/main/img/tupian.png" width="50%" />
 
 
-**列表**
-![列表](https://raw.githubusercontent.com/forzys/custom-markdown/main/img/liebiao.png)
+**列表** 
+
+<img src="https://raw.githubusercontent.com/forzys/custom-markdown/main/img/liebiao.png" width="50%" />
 
 
-**代码**
-![代码](https://raw.githubusercontent.com/forzys/custom-markdown/main/img/daima.png)
+**代码** 
+
+<img src="https://raw.githubusercontent.com/forzys/custom-markdown/main/img/daima.png" width="50%" />
 
 
-**表格**
-![表格](https://raw.githubusercontent.com/forzys/custom-markdown/main/img/biaoge.png)
+**表格** 
+
+<img src="https://raw.githubusercontent.com/forzys/custom-markdown/main/img/biaoge.png" width="50%" />
