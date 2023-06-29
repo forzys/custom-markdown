@@ -66,7 +66,7 @@ console.log(html);
 <img src="https://raw.githubusercontent.com/forzys/custom-markdown/main/img/biaoti.png" width="50%" />
  
 
-**文本** 
+**文本与分割线** 
 
 <img src="https://raw.githubusercontent.com/forzys/custom-markdown/main/img/wenben.png" width="50%" />
 
