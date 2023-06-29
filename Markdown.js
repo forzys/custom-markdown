@@ -1424,13 +1424,11 @@ Markdown.Converter = function () {
     function _Strikethrough(text){
         function parseInside (wm, txt) { 
             return '<del>' + txt + '</del>';
-            }
+        }
 
-            console.log('DEL is SAVE:', /(?:~){2}([\s\S]+?)(?:~){2}/g.test(text) )
-        
-            text = text.replace(/(?:~){2}([\s\S]+?)(?:~){2}/g, parseInside);
-        
-            return text;
+        text = text.replace(/(?:~){2}([\s\S]+?)(?:~){2}/g, parseInside);
+    
+        return text;
     }
 
     function _ParseCodeBlock(text) { 
@@ -1439,7 +1437,7 @@ Markdown.Converter = function () {
         const codeBlocks = matches ? matches.map(match => ({
             language: match.replace(/```(\w*)\n[\s\S]*/, '$1').trim(),
             code: match.replace(/```(\w*)\n|\n```/g, '').trim()
-            })) : []; 
+        })) : []; 
             
         let htmlText = text;
         for (let i = 0; i < codeBlocks.length; i++) {
