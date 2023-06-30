@@ -47,35 +47,36 @@ converter.hooks.chain("postConversion", function (html) {
 
 ### Build
 
-+ **方式1**
+```js
+方式1 
 
     1. 安装  
-        `yarn add rollup --dev`  
-        `npm install uglify-js -g `
+        yarn add rollup --dev
+        npm install uglify-js -g
      
     2. 使用  
-        `yarn rollup Markdown.js --format cjs --file dist/Markdown_cjs.js`
+        yarn rollup Markdown.js --format cjs --file dist/Markdown_cjs.js
     
     3. 压缩  
-         `uglifyjs dist/Markdown_cjs.js -m -o dist/Markdown.min.js`
+        uglifyjs dist/Markdown_cjs.js -m -o dist/Markdown.min.js
 
+方式2
 
-
-+ **方式2** 
     1. 安装    
-        `npm install uglify-js -g  // 全局安装 uglify`   
-        `yarn // 安装依赖`
+        npm install uglify-js -g  // 全局安装 uglify
+        yarn // 安装依赖
 
     2. build  
-        `yarn build`
+        yarn build
  
-
+```
 <br /> 
 
 ### 支持情况
 
 <br />
 
+ 
 **标题** 
  
 <img src="https://raw.githubusercontent.com/forzys/custom-markdown/main/img/biaoti.png" width="50%" />
@@ -109,3 +110,5 @@ converter.hooks.chain("postConversion", function (html) {
 **表格** 
 
 <img src="https://raw.githubusercontent.com/forzys/custom-markdown/main/img/biaoge.png" width="50%" />
+
+ 
