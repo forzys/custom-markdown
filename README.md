@@ -40,6 +40,17 @@ converter.hooks.chain("postConversion", function (html) {
     // This is the converted HTML string
     return html
 });
+ 
+
+/**
+ * Other Hook :
+ * 
+ * postNormalization
+ * preBlockGamut
+ * postBlockGamut
+ * preSpanGamut
+ * postSpanGamut
+ * /
 
 ```
 
