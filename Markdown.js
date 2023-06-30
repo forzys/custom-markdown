@@ -1,19 +1,6 @@
- 
-// Usage:
-//
-//   var text = "Markdown *rocks*.";
-//
-//   var converter = new Markdown.Converter();
-//   var html = converter.makeHtml(text);
-//
-//   alert(html);
-//
-// Note: move the sample code to the bottom of this
-// file before uncommenting it.
-// 
- 
-var Markdown = {};
+var Markdown ={};
 
+ 
 function identity(x) { return x; }
 function returnFalse(x) { return false; }
 
@@ -29,7 +16,11 @@ HookCollection.prototype = {
         if (original === identity)
             this[hookname] = func;
         else
-            this[hookname] = function (x) { return func(original(x)); }
+            this[hookname] = function (text) {
+                var args = Array.prototype.slice.call(arguments, 0);
+                args[0] = original.apply(null, args);
+                return func.apply(null, args);
+            };
     },
     set: function (hookname, func) {
         if (!this[hookname])
@@ -50,7 +41,7 @@ Markdown.HookCollection = HookCollection;
 // caused an exception (and hence stopped the rendering) when the user entered
 // e.g. [push] or [__proto__]. Adding a prefix to the actual key prevents this
 // (since no builtin property starts with "s_"). See
-// http://meta.stackoverflow.com/questions/64655/strange-wmd-bug
+// http://meta.stackexchange.com/questions/64655/strange-wmd-bug
 // (granted, switching from Array() to Object() alone would have left only __proto__
 // to be a problem)
 function SaveHash() { }
@@ -63,11 +54,30 @@ SaveHash.prototype = {
     }
 };
 
-Markdown.Converter = function () {
+Markdown.Converter = function (OPTIONS) {
     var pluginHooks = this.hooks = new HookCollection();
-    pluginHooks.addNoop("plainLinkText");  // given a URL that was encountered by itself (without markup), should return the link text that's to be given to this link
-    pluginHooks.addNoop("preConversion");  // called with the orignal text as given to makeHtml. The result of this plugin hook is the actual markdown source that will be cooked
-    pluginHooks.addNoop("postConversion"); // called with the final cooked HTML code. The result of this plugin hook is the actual output of makeHtml
+    
+    // given a URL that was encountered by itself (without markup), should return the link text that's to be given to this link
+    pluginHooks.addNoop("plainLinkText");
+    
+    // called with the orignal text as given to makeHtml. The result of this plugin hook is the actual markdown source that will be cooked
+    pluginHooks.addNoop("preConversion");
+    
+    // called with the text once all normalizations have been completed (tabs to spaces, line endings, etc.), but before any conversions have
+    pluginHooks.addNoop("postNormalization");
+    
+    // Called with the text before / after creating block elements like code blocks and lists. Note that this is called recursively
+    // with inner content, e.g. it's called with the full text, and then only with the content of a blockquote. The inner
+    // call will receive outdented text.
+    pluginHooks.addNoop("preBlockGamut");
+    pluginHooks.addNoop("postBlockGamut");
+    
+    // called with the text of a single block element before / after the span-level conversions (bold, code spans, etc.) have been made
+    pluginHooks.addNoop("preSpanGamut");
+    pluginHooks.addNoop("postSpanGamut");
+    
+    // called with the final cooked HTML code. The result of this plugin hook is the actual output of makeHtml
+    pluginHooks.addNoop("postConversion");
 
     //
     // Private state of the converter instance:
@@ -81,7 +91,9 @@ Markdown.Converter = function () {
     // Used to track when we're inside an ordered or unordered list
     // (see _ProcessListItems() for details):
     var g_list_level;
-
+    
+    OPTIONS = OPTIONS || {}; 
+      
     this.makeHtml = function (text) {
 
         //
@@ -104,12 +116,9 @@ Markdown.Converter = function () {
 
         text = pluginHooks.preConversion(text);
 
-        text = _ParseCodeBlock(text);
-        // text = _DoCodeBlocks(text);
+        text = _ParseCodeBlock(text); 
         text = _Strikethrough(text);
-        // text = _DoCodeSpans(text);
-        
-        
+
         // attacklab: Replace ~ with ~T
         // This lets us use tilde as an escape char to avoid md5 hashes
         // The choice of character is arbitray; anything that isn't
@@ -130,13 +139,14 @@ Markdown.Converter = function () {
 
         // Convert all tabs to spaces.
         text = _Detab(text);
-        text = _FormatTable(text)
-
+        text = _FormatTable(text, OPTIONS)
         // Strip any lines consisting only of spaces and tabs.
         // This makes subsequent regexen easier to write, because we can
         // match consecutive blank lines with /\n+/ instead of something
         // contorted like /[ \t]*\n+/ .
         text = text.replace(/^[ \t]+$/mg, "");
+
+        text = pluginHooks.postNormalization(text);
 
         // Turn block-level HTML blocks into hash entries
         text = _HashHTMLBlocks(text);
@@ -171,7 +181,7 @@ Markdown.Converter = function () {
 
         /*
         text = text.replace(/
-            ^[ ]{0,3}\[(.+)\]:  // id = $1  attacklab: g_tab_width - 1
+            ^[ ]{0,3}\[([^\[\]]+)\]:  // id = $1  attacklab: g_tab_width - 1
             [ \t]*
             \n?                 // maybe *one* newline
             [ \t]*
@@ -188,18 +198,18 @@ Markdown.Converter = function () {
                 [")]
                 [ \t]*
             )?                  // title is optional
-            (?:\n+|$)
+            (\n+)             // subsequent newlines = $6, capturing because they must be put back if the potential title isn't an actual title
         /gm, function(){...});
         */
 
-        text = text.replace(/^[ ]{0,3}\[(.+)\]:[ \t]*\n?[ \t]*<?(\S+?)>?(?=\s|$)[ \t]*\n?[ \t]*((\n*)["(](.+?)[")][ \t]*)?(?:\n+)/gm,
-            function (wholeMatch, m1, m2, m3, m4, m5) {
+        text = text.replace(/^[ ]{0,3}\[([^\[\]]+)\]:[ \t]*\n?[ \t]*<?(\S+?)>?(?=\s|$)[ \t]*\n?[ \t]*((\n*)["(](.+?)[")][ \t]*)?(\n+)/gm,
+            function (wholeMatch, m1, m2, m3, m4, m5, m6) {
                 m1 = m1.toLowerCase();
                 g_urls.set(m1, _EncodeAmpsAndAngles(m2));  // Link IDs are case-insensitive
                 if (m4) {
                     // Oops, found blank lines, so it's not a title.
                     // Put back the parenthetical statement we stole.
-                    return m3;
+                    return m3 + m6;
                 } else if (m5) {
                     g_titles.set(m1, m5.replace(/"/g, "&quot;"));
                 }
@@ -251,7 +261,7 @@ Markdown.Converter = function () {
             )                       // attacklab: there are sentinel newlines at end of document
         /gm,function(){...}};
         */
-        text = text.replace(/^(<(p|div|h[1-6]|blockquote|pre|table|dl|ol|ul|script|noscript|form|fieldset|iframe|math|ins|del)\b[^\r]*?\n<\/\2>[ \t]*(?=\n+))/gm, hashElement);
+        text = text.replace(/^(<(p|div|h[1-6]|blockquote|pre|table|dl|ol|ul|script|noscript|form|fieldset|iframe|math|ins|del)\b[^\r]*?\n<\/\2>[ \t]*(?=\n+))/gm, hashMatch);
 
         //
         // Now match more liberally, simply from `\n<tag>` to `</tag>\n`
@@ -271,7 +281,7 @@ Markdown.Converter = function () {
             )                       // attacklab: there are sentinel newlines at end of document
         /gm,function(){...}};
         */
-        text = text.replace(/^(<(p|div|h[1-6]|blockquote|pre|table|dl|ol|ul|script|noscript|form|fieldset|iframe|math)\b[^\r]*?.*<\/\2>[ \t]*(?=\n+)\n)/gm, hashElement);
+        text = text.replace(/^(<(p|div|h[1-6]|blockquote|pre|table|dl|ol|ul|script|noscript|form|fieldset|iframe|math)\b[^\r]*?.*<\/\2>[ \t]*(?=\n+)\n)/gm, hashMatch);
 
         // Special case just for <hr />. It was easier to make a special case than
         // to make the other regex more complicated.  
@@ -288,9 +298,9 @@ Markdown.Converter = function () {
                 [ \t]*
                 (?=\n{2,})      // followed by a blank line
             )
-        /g,hashElement);
+        /g,hashMatch);
         */
-        text = text.replace(/\n[ ]{0,3}((<(hr)\b([^<>])*?\/?>)[ \t]*(?=\n{2,}))/g, hashElement);
+        text = text.replace(/\n[ ]{0,3}((<(hr)\b([^<>])*?\/?>)[ \t]*(?=\n{2,}))/g, hashMatch);
 
         // Special case for standalone HTML comments:
 
@@ -300,14 +310,14 @@ Markdown.Converter = function () {
             [ ]{0,3}                                        // attacklab: g_tab_width - 1
             (                                               // save in $1
                 <!
-                (--(?:|(?:[^>-]|-[^>])(?:[^-]|-[^-])*)--)   // see http://www.w3.org/TR/html-markup/syntax.html#comments and http://meta.stackoverflow.com/q/95256
+                (--(?:|(?:[^>-]|-[^>])(?:[^-]|-[^-])*)--)   // see http://www.w3.org/TR/html-markup/syntax.html#comments and http://meta.stackexchange.com/q/95256
                 >
                 [ \t]*
                 (?=\n{2,})                                  // followed by a blank line
             )
-        /g,hashElement);
+        /g,hashMatch);
         */
-        text = text.replace(/\n\n[ ]{0,3}(<!(--(?:|(?:[^>-]|-[^>])(?:[^-]|-[^-])*)--)>[ \t]*(?=\n{2,}))/g, hashElement);
+        text = text.replace(/\n\n[ ]{0,3}(<!(--(?:|(?:[^>-]|-[^>])(?:[^-]|-[^-])*)--)>[ \t]*(?=\n{2,}))/g, hashMatch);
 
         // PHP and ASP-style processor instructions (<?...?> and <%...%>)
 
@@ -326,33 +336,33 @@ Markdown.Converter = function () {
                 [ \t]*
                 (?=\n{2,})      // followed by a blank line
             )
-        /g,hashElement);
+        /g,hashMatch);
         */
-        text = text.replace(/(?:\n\n)([ ]{0,3}(?:<([?%])[^\r]*?\2>)[ \t]*(?=\n{2,}))/g, hashElement);
+        text = text.replace(/(?:\n\n)([ ]{0,3}(?:<([?%])[^\r]*?\2>)[ \t]*(?=\n{2,}))/g, hashMatch);
 
         return text;
     }
 
-    function hashElement(wholeMatch, m1) {
-        var blockText = m1;
-
-        // Undo double lines
-        blockText = blockText.replace(/^\n+/, "");
-
-        // strip trailing blank lines
-        blockText = blockText.replace(/\n+$/g, "");
-
+    function hashBlock(text) {
+        text = text.replace(/(^\n+|\n+$)/g, "");
         // Replace the element text with a marker ("~KxK" where x is its key)
-        blockText = "\n\n~K" + (g_html_blocks.push(blockText) - 1) + "K\n\n";
-
-        return blockText;
+        return "\n\n~K" + (g_html_blocks.push(text) - 1) + "K\n\n";
     }
 
-    function _RunBlockGamut(text, doNotUnhash) {
+    function hashMatch(wholeMatch, m1) {
+        return hashBlock(m1);
+    }
+    
+    var blockGamutHookCallback = function (t) { return _RunBlockGamut(t); }
+
+    function _RunBlockGamut(text, doNotUnhash, doNotCreateParagraphs) {
         //
         // These are all the transformations that form block-level
         // tags like paragraphs, headers, and list items.
         //
+        
+        text = pluginHooks.preBlockGamut(text, blockGamutHookCallback);
+        
         text = _DoHeaders(text);
 
         // Do Horizontal Rules:
@@ -364,13 +374,16 @@ Markdown.Converter = function () {
         text = _DoLists(text);
         text = _DoCodeBlocks(text);
         text = _DoBlockQuotes(text);
+        
+        text = pluginHooks.postBlockGamut(text, blockGamutHookCallback);
 
         // We already ran _HashHTMLBlocks() before, in Markdown(), but that
         // was to escape raw HTML in the original Markdown source. This time,
         // we're escaping the markup we've just created, so that we don't wrap
         // <p> tags around block-level tags.
         text = _HashHTMLBlocks(text);
-        text = _FormParagraphs(text, doNotUnhash);
+        
+        text = _FormParagraphs(text, doNotUnhash, doNotCreateParagraphs);
 
         return text;
     }
@@ -381,6 +394,8 @@ Markdown.Converter = function () {
         // tags like paragraphs, headers, and list items.
         //
 
+        text = pluginHooks.preSpanGamut(text);
+        
         text = _DoCodeSpans(text);
         text = _EscapeSpecialCharsWithinTagAttributes(text);
         text = _EncodeBackslashEscapes(text);
@@ -402,6 +417,8 @@ Markdown.Converter = function () {
 
         // Do hard breaks:
         text = text.replace(/  +\n/g, " <br />\n");
+        
+        text = pluginHooks.postSpanGamut(text);
 
         return text;
     }
@@ -421,7 +438,7 @@ Markdown.Converter = function () {
 
         text = text.replace(regex, function (wholeMatch) {
             var tag = wholeMatch.replace(/(.)<\/?code>(?=.)/g, "$1`");
-            tag = escapeCharacters(tag, wholeMatch.charAt(1) == "!" ? "\\`*_/" : "\\`*_"); // also escape slashes in comments to prevent autolinking there -- http://meta.stackoverflow.com/questions/95987
+            tag = escapeCharacters(tag, wholeMatch.charAt(1) == "!" ? "\\`*_/" : "\\`*_"); // also escape slashes in comments to prevent autolinking there -- http://meta.stackexchange.com/questions/95987
             return tag;
         });
 
@@ -429,6 +446,10 @@ Markdown.Converter = function () {
     }
 
     function _DoAnchors(text) {
+        
+        if (text.indexOf("[") === -1)
+            return text;
+        
         //
         // Turn Markdown link shortcuts into XHTML <a> tags.
         //
@@ -484,7 +505,7 @@ Markdown.Converter = function () {
                     (?:
                         \([^)]*\)       // allow one level of (correctly nested) parens (think MSDN)
                         |
-                        [^()]
+                        [^()\s]
                     )*?
                 )>?                
                 [ \t]*
@@ -499,7 +520,7 @@ Markdown.Converter = function () {
         /g, writeAnchorTag);
         */
 
-        text = text.replace(/(\[((?:\[[^\]]*\]|[^\[\]])*)\]\([ \t]*()<?((?:\([^)]*\)|[^()])*?)>?[ \t]*((['"])(.*?)\6[ \t]*)?\))/g, writeAnchorTag);
+        text = text.replace(/(\[((?:\[[^\]]*\]|[^\[\]])*)\]\([ \t]*()<?((?:\([^)]*\)|[^()\s])*?)>?[ \t]*((['"])(.*?)\6[ \t]*)?\))/g, writeAnchorTag);
 
         //
         // Last, handle reference-style shortcuts: [link text]
@@ -552,12 +573,12 @@ Markdown.Converter = function () {
                 }
             }
         }
-        url = encodeProblemUrlChars(url);
-        url = escapeCharacters(url, "*_");
+        url = attributeSafeUrl(url);
+
         var result = "<a href=\"" + url + "\"";
 
         if (title != "") {
-            title = title.replace(/"/g, "&quot;");
+            title = attributeEncode(title);
             title = escapeCharacters(title, "*_");
             result += " title=\"" + title + "\"";
         }
@@ -568,6 +589,10 @@ Markdown.Converter = function () {
     }
 
     function _DoImages(text) {
+        
+        if (text.indexOf("![") === -1)
+            return text;
+        
         //
         // Turn Markdown image shortcuts into <img> tags.
         //
@@ -625,6 +650,12 @@ Markdown.Converter = function () {
 
         return text;
     }
+    
+    function attributeEncode(text) {
+        // unconditionally replace angle brackets here -- what ends up in an attribute (e.g. alt or title)
+        // never makes sense to have verbatim HTML in it (and the sanitizer would totally break it)
+        return text.replace(/>/g, "&gt;").replace(/</g, "&lt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    }
 
     function writeImageTag(wholeMatch, m1, m2, m3, m4, m5, m6, m7) {
         var whole_match = m1;
@@ -652,8 +683,8 @@ Markdown.Converter = function () {
                 return whole_match;
             }
         }
-
-        alt_text = escapeCharacters(alt_text.replace(/"/g, "&quot;"), "*_[]()");
+        
+        alt_text = escapeCharacters(attributeEncode(alt_text), "*_[]()");
         url = escapeCharacters(url, "*_");
         var result = "<img src=\"" + url + "\" alt=\"" + alt_text + "\"";
 
@@ -661,7 +692,7 @@ Markdown.Converter = function () {
         // Replicate this bug.
 
         //if (title != "") {
-        title = title.replace(/"/g, "&quot;");
+        title = attributeEncode(title);
         title = escapeCharacters(title, "*_");
         result += " title=\"" + title + "\"";
         //}
@@ -751,11 +782,13 @@ Markdown.Converter = function () {
         /g
         */
         var whole_list = /^(([ ]{0,3}([*+-]|\d+[.])[ \t]+)[^\r]+?(~0|\n{2,}(?=\S)(?![ \t]*(?:[*+-]|\d+[.])[ \t]+)))/gm;
-
         if (g_list_level) {
             text = text.replace(whole_list, function (wholeMatch, m1, m2) {
                 var list = m1;
                 var list_type = (m2.search(/[*+-]/g) > -1) ? "ul" : "ol";
+                var first_number;
+                if (list_type === "ol")
+                    first_number = parseInt(m2, 10)
 
                 var result = _ProcessListItems(list, list_type);
 
@@ -764,7 +797,10 @@ Markdown.Converter = function () {
                 // HTML block parser. This is a hack to work around the terrible
                 // hack that is the HTML block parser.
                 result = result.replace(/\s+$/, "");
-                result = "<" + list_type + ">" + result + "</" + list_type + ">\n";
+                var opening = "<" + list_type;
+                if (first_number && first_number !== 1)
+                    opening += " start=\"" + first_number + "\"";
+                result = opening + ">" + result + "</" + list_type + ">\n";
                 return result;
             });
         } else {
@@ -774,8 +810,17 @@ Markdown.Converter = function () {
                 var list = m2;
 
                 var list_type = (m3.search(/[*+-]/g) > -1) ? "ul" : "ol";
+
+                var first_number;
+                if (list_type === "ol")
+                    first_number = parseInt(m3, 10)
+
                 var result = _ProcessListItems(list, list_type);
-                result = runup + "<" + list_type + ">\n" + result + "</" + list_type + ">\n";
+                var opening = "<" + list_type;
+                if (first_number && first_number !== 1)
+                    opening += " start=\"" + first_number + "\"";
+
+                result = runup + opening + ">\n" + result + "</" + list_type + ">\n";
                 return result;
             });
         }
@@ -855,19 +900,12 @@ Markdown.Converter = function () {
         list_str = list_str.replace(re,
             function (wholeMatch, m1, m2, m3) {
                 var item = m3;
-                var leading_space = m1;
                 var ends_with_double_newline = /\n\n$/.test(item);
                 var contains_double_newline = ends_with_double_newline || item.search(/\n{2,}/) > -1;
-
-                if (contains_double_newline || last_item_had_a_double_newline) {
-                    item = _RunBlockGamut(_Outdent(item), /* doNotUnhash = */true);
-                }
-                else {
-                    // Recursion for sub-lists:
-                    item = _DoLists(_Outdent(item));
-                    item = item.replace(/\n$/, ""); // chomp(item)
-                    item = _RunSpanGamut(item);
-                }
+                
+                var loose = contains_double_newline || last_item_had_a_double_newline;
+                item = _RunBlockGamut(_Outdent(item), /* doNotUnhash = */true, /* doNotCreateParagraphs = */ !loose);
+                
                 last_item_had_a_double_newline = ends_with_double_newline;
                 return "<li>" + item + "</li>\n";
             }
@@ -901,7 +939,7 @@ Markdown.Converter = function () {
         // attacklab: sentinel workarounds for lack of \A and \Z, safari\khtml bug
         text += "~0";
 
-        text = text.replace(/(?:\n\n|^)((?:(?:[ ]{4}|\t).*\n+)+)(\n*[ ]{0,3}[^ \t\n]|(?=~0))/g,
+        text = text.replace(/(?:\n\n|^\n?)((?:(?:[ ]{4}|\t).*\n+)+)(\n*[ ]{0,3}[^ \t\n]|(?=~0))/g,
             function (wholeMatch, m1, m2) {
                 var codeblock = m1;
                 var nextChar = m2;
@@ -921,11 +959,6 @@ Markdown.Converter = function () {
         text = text.replace(/~0/, "");
 
         return text;
-    }
-
-    function hashBlock(text) {
-        text = text.replace(/(^\n+|\n+$)/g, "");
-        return "\n\n~K" + (g_html_blocks.push(text) - 1) + "K\n\n";
     }
 
     function _DoCodeSpans(text) {
@@ -956,8 +989,9 @@ Markdown.Converter = function () {
 
         /*
         text = text.replace(/
-            (^|[^\\])       // Character before opening ` can't be a backslash
+            (^|[^\\`])      // Character before opening ` can't be a backslash or backtick
             (`+)            // $2 = Opening run of `
+            (?!`)           // and no more backticks -- match the full run
             (               // $3 = The code block
                 [^\r]*?
                 [^`]        // attacklab: work around lack of lookbehind
@@ -967,7 +1001,7 @@ Markdown.Converter = function () {
         /gm, function(){...});
         */
 
-        text = text.replace(/(^|[^\\])(`+)([^\r]*?[^`])\2(?!`)/gm,
+        text = text.replace(/(^|[^\\`])(`+)(?!`)([^\r]*?[^`])\2(?!`)/gm,
             function (wholeMatch, m1, m2, m3, m4) {
                 var c = m3;
                 c = c.replace(/^([ \t]*)/g, ""); // leading whitespace
@@ -1013,16 +1047,41 @@ Markdown.Converter = function () {
 
     function _DoItalicsAndBold(text) {
 
+        if (text.indexOf("*") === -1 && text.indexOf("_") === - 1)
+            return text; 
+    
         // <strong> must go first:
-        text = text.replace(/([\W_]|^)(\*\*|__)(?=\S)([^\r]*?\S[\*_]*)\2([\W_]|$)/g,
-        "$1<strong>$3</strong>$4");
+        
+        // (^|[\W_])           Start with a non-letter or beginning of string. Store in \1.
+        // (?:(?!\1)|(?=^))    Either the next character is *not* the same as the previous,
+        //                     or we started at the end of the string (in which case the previous
+        //                     group had zero width, so we're still there). Because the next
+        //                     character is the marker, this means that if there are e.g. multiple
+        //                     underscores in a row, we can only match the left-most ones (which
+        //                     prevents foo___bar__ from getting bolded)
+        // (\*|_)              The marker character itself, asterisk or underscore. Store in \2.
+        // \2                  The marker again, since bold needs two.
+        // (?=\S)              The first bolded character cannot be a space.
+        // ([^\r]*?\S)         The actual bolded string. At least one character, and it cannot *end*
+        //                     with a space either. Note that like in many other places, [^\r] is
+        //                     just a workaround for JS' lack of single-line regexes; it's equivalent
+        //                     to a . in an /s regex, because the string cannot contain any \r (they
+        //                     are removed in the normalizing step).
+        // \2\2                The marker character, twice -- end of bold.
+        // (?!\2)              Not followed by another marker character (ensuring that we match the
+        //                     rightmost two in a longer row)...
+        // (?=[\W_]|$)         ...but by any other non-word character or the end of string.
+        text = text.replace(/(^|[\W_])(?:(?!\1)|(?=^))(\*|_)\2(?=\S)([^\r]*?\S)\2\2(?!\2)(?=[\W_]|$)/g,
+        "$1<strong>$3</strong>");
 
-        text = text.replace(/([\W_]|^)(\*|_)(?=\S)([^\r\*_]*?\S)\2([\W_]|$)/g,
-        "$1<em>$3</em>$4");
+        // This is almost identical to the <strong> regex, except 1) there's obviously just one marker
+        // character, and 2) the italicized string cannot contain the marker character.
+        text = text.replace(/(^|[\W_])(?:(?!\1)|(?=^))(\*|_)(?=\S)((?:(?!\2)[^\r])*?\S)\2(?!\2)(?=[\W_]|$)/g,
+        "$1<em>$3</em>");
 
         return text;
     }
-
+    
     function _DoBlockQuotes(text) {
 
         /*
@@ -1071,7 +1130,7 @@ Markdown.Converter = function () {
         return text;
     }
 
-    function _FormParagraphs(text, doNotUnhash) {
+    function _FormParagraphs(text, doNotUnhash, doNotCreateParagraphs) {
         //
         //  Params:
         //    $text - string to process with html <p> tags
@@ -1099,8 +1158,9 @@ Markdown.Converter = function () {
             }
             else if (/\S/.test(str)) {
                 str = _RunSpanGamut(str);
-                str = str.replace(/^([ \t]*)/g, "<p>");
-                str += "</p>"
+                str = str.replace(/^([ \t]*)/g, doNotCreateParagraphs ? "" : "<p>");
+                if (!doNotCreateParagraphs)
+                    str += "</p>"
                 grafsOut.push(str);
             }
 
@@ -1132,7 +1192,7 @@ Markdown.Converter = function () {
         text = text.replace(/&(?!#?[xX]?(?:[0-9a-fA-F]+|\w+);)/g, "&amp;");
 
         // Encode naked <'s
-        text = text.replace(/<(?![a-z\/?\$!])/gi, "&lt;");
+        text = text.replace(/<(?![a-z\/?!]|~D)/gi, "&lt;");
 
         return text;
     }
@@ -1158,18 +1218,66 @@ Markdown.Converter = function () {
         return text;
     }
 
+    var charInsideUrl = "[-A-Z0-9+&@#/%?=~_|[\\]()!:,.;]",
+        charEndingUrl = "[-A-Z0-9+&@#/%=~_|[\\])]",
+        autoLinkRegex = new RegExp("(=\"|<)?\\b(https?|ftp)(://" + charInsideUrl + "*" + charEndingUrl + ")(?=$|\\W)", "gi"),
+        endCharRegex = new RegExp(charEndingUrl, "i");
+
+    function handleTrailingParens(wholeMatch, lookbehind, protocol, link) {
+        if (lookbehind)
+            return wholeMatch;
+        if (link.charAt(link.length - 1) !== ")")
+            return "<" + protocol + link + ">";
+        var parens = link.match(/[()]/g);
+        var level = 0;
+        for (var i = 0; i < parens.length; i++) {
+            if (parens[i] === "(") {
+                if (level <= 0)
+                    level = 1;
+                else
+                    level++;
+            }
+            else {
+                level--;
+            }
+        }
+        var tail = "";
+        if (level < 0) {
+            var re = new RegExp("\\){1," + (-level) + "}$");
+            link = link.replace(re, function (trailingParens) {
+                tail = trailingParens;
+                return "";
+            });
+        }
+        if (tail) {
+            var lastChar = link.charAt(link.length - 1);
+            if (!endCharRegex.test(lastChar)) {
+                tail = lastChar + tail;
+                link = link.substr(0, link.length - 1);
+            }
+        }
+        return "<" + protocol + link + ">" + tail;
+    }
+    
     function _DoAutoLinks(text) {
 
         // note that at this point, all other URL in the text are already hyperlinked as <a href=""></a>
         // *except* for the <http://www.foo.com> case
 
         // automatically add < and > around unadorned raw hyperlinks
-        // must be preceded by space/BOF and followed by non-word/EOF character    
-        text = text.replace(/(^|\s)(https?|ftp)(:\/\/[-A-Z0-9+&@#\/%?=~_|\[\]\(\)!:,\.;]*[-A-Z0-9+&@#\/%=~_|\[\]])($|\W)/gi, "$1<$2$3>$4");
+        // must be preceded by a non-word character (and not by =" or <) and followed by non-word/EOF character
+        // simulating the lookbehind in a consuming way is okay here, since a URL can neither and with a " nor
+        // with a <, so there is no risk of overlapping matches.
+        text = text.replace(autoLinkRegex, handleTrailingParens);
 
         //  autolink anything like <http://example.com>
         
-        var replacer = function (wholematch, m1) { return "<a href=\"" + m1 + "\">" + pluginHooks.plainLinkText(m1) + "</a>"; }
+
+        var replacer = function (wholematch, m1) {
+            var url = attributeSafeUrl(m1);
+            
+            return "<a href=\"" + url + "\">" + pluginHooks.plainLinkText(m1) + "</a>";
+        };
         text = text.replace(/<((https?|ftp):[^'">\s]+)>/gi, replacer);
 
         // Email addresses: <address@domain.foo>
@@ -1248,26 +1356,11 @@ Markdown.Converter = function () {
     //  attacklab: Utility functions
     //
 
-    var _problemUrlChars = /(?:["'*()[\]:]|~D)/g;
-
-    // hex-encodes some unusual "problem" chars in URLs to avoid URL detection problems 
-    function encodeProblemUrlChars(url) {
-        if (!url)
-            return "";
-
-        var len = url.length;
-
-        return url.replace(_problemUrlChars, function (match, offset) {
-            if (match == "~D") // escape for dollar
-                return "%24";
-            if (match == ":") {
-                if (offset == len - 1 || /[0-9\/]/.test(url.charAt(offset + 1)))
-                    return ":"
-            }
-            return "%" + match.charCodeAt(0).toString(16);
-        });
+    function attributeSafeUrl(url) {
+        url = attributeEncode(url);
+        url = escapeCharacters(url, "*_:()[]")
+        return url;
     }
-
 
     function escapeCharacters(text, charsToEscape, afterBackslash) {
         // First we have to escape the escape characters so that
@@ -1288,14 +1381,13 @@ Markdown.Converter = function () {
     function escapeCharacters_callback(wholeMatch, m1) {
         var charCodeToEscape = m1.charCodeAt(0);
         return "~E" + charCodeToEscape + "E";
-        
     }
 
     function _FormatTable(text, options = {}){
         var tableRgx       = /^ {0,3}\|?.+\|.+\n {0,3}\|?[ \t]*:?[ \t]*(?:[-=]){2,}[ \t]*:?[ \t]*\|[ \t]*:?[ \t]*(?:[-=]){2,}[\s\S]+?(?:\n\n|¨0)/gm,
         //singeColTblRgx = /^ {0,3}\|.+\|\n {0,3}\|[ \t]*:?[ \t]*(?:[-=]){2,}[ \t]*:?[ \t]*\|[ \t]*\n(?: {0,3}\|.+\|\n)+(?:\n\n|¨0)/gm;
         singeColTblRgx = /^ {0,3}\|.+\|[ \t]*\n {0,3}\|[ \t]*:?[ \t]*(?:[-=]){2,}[ \t]*:?[ \t]*\|[ \t]*\n( {0,3}\|.+\|[ \t]*\n)*(?:\n|¨0)/gm;
-            
+         
         function parseStyles (sLine) {
             if (/^:[ \t]*--*$/.test(sLine)) {
                 return ' style="text-align:left;"';
@@ -1313,7 +1405,7 @@ Markdown.Converter = function () {
             header = header.trim();
             // support both tablesHeaderId and tableHeaderId due to error in documentation so we don't break backwards compatibility
             if (options.tablesHeaderId || options.tableHeaderId) {
-                id = ' id="' + header.replace(/ /g, '_').toLowerCase() + '"';
+              id = ' id="' + header.replace(/ /g, '_').toLowerCase() + '"';
             }
             header = _RunSpanGamut(header)
             return '<th' + id + style + '>' + header + '</th>\n';
@@ -1330,16 +1422,16 @@ Markdown.Converter = function () {
                 tblLgn = headers.length;
         
             for (var i = 0; i < tblLgn; ++i) {
-                tb += headers[i];
+              tb += headers[i];
             }
             tb += '</tr>\n</thead>\n<tbody>\n';
         
             for (i = 0; i < cells.length; ++i) {
-                tb += '<tr>\n';
-                for (var ii = 0; ii < tblLgn; ++ii) {
+              tb += '<tr>\n';
+              for (var ii = 0; ii < tblLgn; ++ii) {
                 tb += cells[i][ii];
-                }
-                tb += '</tr>\n';
+              }
+              tb += '</tr>\n';
             }
             tb += '</tbody>\n</table>\n';
             return tb;
@@ -1349,15 +1441,15 @@ Markdown.Converter = function () {
             var i, tableLines = rawTable.split('\n');
         
             for (i = 0; i < tableLines.length; ++i) {
-                // strip wrong first and last column if wrapped tables are used
-                if (/^ {0,3}\|/.test(tableLines[i])) {
+              // strip wrong first and last column if wrapped tables are used
+              if (/^ {0,3}\|/.test(tableLines[i])) {
                 tableLines[i] = tableLines[i].replace(/^ {0,3}\|/, '');
-                }
-                if (/\|[ \t]*$/.test(tableLines[i])) {
+              }
+              if (/\|[ \t]*$/.test(tableLines[i])) {
                 tableLines[i] = tableLines[i].replace(/\|[ \t]*$/, '');
-                }
-                // parse code spans first, but we only support one line code spans
-                tableLines[i] = _DoCodeSpans(tableLines[i]) 
+              }
+              // parse code spans first, but we only support one line code spans
+              tableLines[i] = _DoCodeSpans(tableLines[i]) 
             }
         
             var rawHeaders = tableLines[0].split('|').map(function (s) { return s.trim();}),
@@ -1371,40 +1463,40 @@ Markdown.Converter = function () {
             tableLines.shift();
         
             for (i = 0; i < tableLines.length; ++i) {
-                if (tableLines[i].trim() === '') {
+              if (tableLines[i].trim() === '') {
                 continue;
-                }
-                rawCells.push(
+              }
+              rawCells.push(
                 tableLines[i]
-                    .split('|')
-                    .map(function (s) {
+                  .split('|')
+                  .map(function (s) {
                     return s.trim();
-                    })
-                );
+                  })
+              );
             }
         
             if (rawHeaders.length < rawStyles.length) {
-                return rawTable;
+              return rawTable;
             }
         
             for (i = 0; i < rawStyles.length; ++i) {
-                styles.push(parseStyles(rawStyles[i]));
+              styles.push(parseStyles(rawStyles[i]));
             }
         
             for (i = 0; i < rawHeaders.length; ++i) {
                 if(typeof styles[i] === 'undefined'){
                     styles[i] = '';
                 }
-                
-                headers.push(parseHeaders(rawHeaders[i], styles[i]));
+              
+              headers.push(parseHeaders(rawHeaders[i], styles[i]));
             }
         
             for (i = 0; i < rawCells.length; ++i) {
-                var row = [];
-                for (var ii = 0; ii < headers.length; ++ii) { 
+              var row = [];
+              for (var ii = 0; ii < headers.length; ++ii) { 
                 row.push(parseCells(rawCells[i][ii], styles[ii]));
-                }
-                cells.push(row);
+              }
+              cells.push(row);
             }
         
             return buildTable(headers, cells);
@@ -1424,11 +1516,9 @@ Markdown.Converter = function () {
     function _Strikethrough(text){
         function parseInside (wm, txt) { 
             return '<del>' + txt + '</del>';
-        }
-
-        text = text.replace(/(?:~){2}([\s\S]+?)(?:~){2}/g, parseInside);
-    
-        return text;
+          }
+          text = text.replace(/(?:~){2}([\s\S]+?)(?:~){2}/g, parseInside);
+          return text;
     }
 
     function _ParseCodeBlock(text) { 
@@ -1437,20 +1527,17 @@ Markdown.Converter = function () {
         const codeBlocks = matches ? matches.map(match => ({
             language: match.replace(/```(\w*)\n[\s\S]*/, '$1').trim(),
             code: match.replace(/```(\w*)\n|\n```/g, '').trim()
-        })) : []; 
-            
+          })) : []; 
+           
         let htmlText = text;
         for (let i = 0; i < codeBlocks.length; i++) {
-            const { language, code } = codeBlocks[i];
-            const codeHTML = `<pre><code class="${language}">${code}</code></pre>`;
-            htmlText = htmlText.replace(matches[i], codeHTML);
+          const { language, code } = codeBlocks[i];
+          const codeHTML = `<pre><code class="${language}">${code}</code></pre>`;
+          htmlText = htmlText.replace(matches[i], codeHTML);
         }
         return htmlText;
     }
 
-
 }; // end of the Markdown.Converter constructor
 
- 
-
-export default Markdown;
+export default Markdown
