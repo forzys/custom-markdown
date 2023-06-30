@@ -12,14 +12,33 @@
 ```javascript
 import Markdown from './Markdown';
 
-const markdown = new Markdown.Converter()
+const converter = new Markdown.Converter()
 
 let md = '_this_ is **easy** to `use`.';
 
-let html = markdown.makeHtml(md)
+let html = converter.makeHtml(md)
 
 console.log(html);
 //<p><em>this</em> is <strong>easy</strong> to <code>use</code>.</p>
+
+
+// Hooks 
+
+converter.hooks.chain("preConversion", function (text) {
+    // This is the string before conversion
+    return text.replace(/\b(a\w*)/gi, "**$1**");
+});
+
+converter.hooks.chain("plainLinkText", function (url) {
+    // This is the matching URL link
+    return "This is a link to " + url.replace(/^https?:\/\//, "");
+});
+
+converter.hooks.chain("postConversion", function (html) {
+    // This is the converted HTML string
+    return html
+});
+
 ```
 
 ### Build
