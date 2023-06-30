@@ -2,10 +2,12 @@
 ### Custom-Markdown
 
 
-> Modify pagedown to support tables, strikethroughs, code blocks, etc.  
+> Modify pagedown to support `tables`, `strikethroughs`, `code blocks`, etc.  
 修改 [pagedown](https://github.com/ujifgc/pagedown) 添加table支持 添加删除线 以及代码块。
 
 > 特性：极简(10k) 支持度较好 高度自定义
+
+<br /> 
 
 ### Usage
 
@@ -41,40 +43,34 @@ converter.hooks.chain("postConversion", function (html) {
 
 ```
 
+<br /> 
+
 ### Build
 
-**方式1**
++ **方式1**
 
-1. 安装  
-```bash
-    yarn add rollup --dev 
-    npm install uglify-js -g 
-``` 
-
-2. 使用  
-```bash
-    yarn rollup Markdown.js --format cjs --file dist/Markdown_cjs.js
-```
-
-2. 压缩  
-```bash
-    uglifyjs dist/Markdown_cjs.js -m -o dist/Markdown.min.js
-```
+    1. 安装  
+        `yarn add rollup --dev`  
+        `npm install uglify-js -g `
+     
+    2. 使用  
+        `yarn rollup Markdown.js --format cjs --file dist/Markdown_cjs.js`
+    
+    3. 压缩  
+         `uglifyjs dist/Markdown_cjs.js -m -o dist/Markdown.min.js`
 
 
-**方式2** 
-1. 安装  
-```bash
-    // 全局安装 uglify
-    npm install uglify-js -g 
-    // 安装依赖
-    yarn
-```
 
-2. build
-```bash
-    yarn build
-```
++ **方式2** 
+    1. 安装    
+        `npm install uglify-js -g  // 全局安装 uglify`   
+        `yarn // 安装依赖`
+
+    2. build  
+        `yarn build`
+ 
+
+<br /> 
 
 ### 支持情况
 
