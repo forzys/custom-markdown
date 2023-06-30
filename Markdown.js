@@ -75,6 +75,8 @@ Markdown.Converter = function (OPTIONS) {
     // called with the text of a single block element before / after the span-level conversions (bold, code spans, etc.) have been made
     pluginHooks.addNoop("preSpanGamut");
     pluginHooks.addNoop("postSpanGamut");
+
+    pluginHooks.addNoop("postCodeGamut");
     
     // called with the final cooked HTML code. The result of this plugin hook is the actual output of makeHtml
     pluginHooks.addNoop("postConversion");
@@ -1532,7 +1534,10 @@ Markdown.Converter = function (OPTIONS) {
         let htmlText = text;
         for (let i = 0; i < codeBlocks.length; i++) {
           const { language, code } = codeBlocks[i];
-          const codeHTML = `<pre><code class="${language}">${code}</code></pre>`;
+          let codeStr = pluginHooks.postCodeGamut(code, language);
+          let codeHTML = `<div class="code"><header></header><pre><code class="language-${language}">${codeStr}</code></pre></div>`;
+        //   codeHTML = pluginHooks.postCodeGamut(codeHTML, language);
+
           htmlText = htmlText.replace(matches[i], codeHTML);
         }
         return htmlText;
@@ -1541,3 +1546,4 @@ Markdown.Converter = function (OPTIONS) {
 }; // end of the Markdown.Converter constructor
 
 export default Markdown
+ 

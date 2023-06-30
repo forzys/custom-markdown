@@ -44,12 +44,14 @@ converter.hooks.chain("postConversion", function (html) {
 
 /**
  * Other Hook :
+ * 添加代码高亮支持
+ * postCodeGamut
  * 
  * postNormalization
  * preBlockGamut
  * postBlockGamut
  * preSpanGamut
- * postSpanGamut
+ * postSpanGamut 
  * /
 
 ```
@@ -116,6 +118,11 @@ converter.hooks.chain("postConversion", function (html) {
 **代码** 
 
 <img src="https://raw.githubusercontent.com/forzys/custom-markdown/main/img/daima.png" width="50%" />
+
+
+**高亮** 
+
+<img src="https://raw.githubusercontent.com/forzys/custom-markdown/main/img/gaoliang.png" width="50%" />
 
 
 **表格** 
