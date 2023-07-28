@@ -5,7 +5,7 @@
 > Modify pagedown to support `tables`, `strikethroughs`, `code blocks`, etc.  
 修改 [pagedown](https://github.com/ujifgc/pagedown) 添加table支持 添加删除线 以及代码块。
 
-> 特性：极简(10k) 支持度较好 高度自定义
+> 特性：极简(10k) gzip(5k) 支持度较好 高度自定义
 
 <br /> 
 
